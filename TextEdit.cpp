@@ -244,43 +244,56 @@ void OpenSaveFile() {
 	LocalUnlock(hTxtBuf);
 	return;
 }
-//подсчет символов и слов в тексте
-void GetNumWordAndSymbols()
+//поток для подсчета символов и слов в тексте
+DWORD WINAPI GetNumWordAndSymbols(CONST LPVOID lpParam)
 {
-	int charNum = GetWindowTextLength(hEdit);
-	char *tempBuf = new char[charNum + 1];
+	int charNum = 0;
+	char *tempBuf = 0;
 	char *posTemp = 0;
+	int numWords = 0;
 	char numWordsCh[100];
 	char numSymCh[100];
 	char result[200];
-	int numWords = 0;
-	ZeroMemory(tempBuf, charNum + 1);
-	ZeroMemory(numWordsCh, 100);
-	ZeroMemory(numSymCh, 100);
-	ZeroMemory(result, 200);
 
-	GetWindowText(hEdit, tempBuf, charNum + 1);
+	while (1) {
+		numWords = 0;
+		tempBuf = 0;
+		posTemp = 0;
+		charNum = GetWindowTextLength(hEdit);
+		tempBuf = new char[charNum + 1];
 
-	_itoa_s(lstrlen(tempBuf), numSymCh, 100, 10);
+		ZeroMemory(tempBuf, charNum + 1);
+		ZeroMemory(numWordsCh, 100);
+		ZeroMemory(numSymCh, 100);
+		ZeroMemory(result, 200);
 
-	char * pch;
-	pch = strtok_s(tempBuf, " ,.-", &posTemp);
-	while (pch != NULL)
-	{
-		pch = strtok_s(NULL, " ,.-", &posTemp);
-		numWords++;
+		GetWindowText(hEdit, tempBuf, charNum + 1);
+
+		_itoa_s(lstrlen(tempBuf), numSymCh, 100, 10);
+
+		char * pch;
+		pch = strtok_s(tempBuf, " ,.-\"!;:", &posTemp);
+		while (pch != NULL)
+		{
+			pch = strtok_s(NULL, " ,.-\"!;:", &posTemp);
+			numWords++;
+		}
+
+		_itoa_s(numWords, numWordsCh, 100, 10);
+
+		strcat_s(result, 200, "symbols: ");
+		strcat_s(result, 200, numSymCh);
+		strcat_s(result, 200, "; words: ");
+		strcat_s(result, 200, numWordsCh);
+
+		SendMessage(hStatusWindow, SB_SETTEXT, 0, (LPARAM)result);
+
+		delete[] tempBuf;
+
+		Sleep(1000);
 	}
 
-	_itoa_s(numWords, numWordsCh, 100, 10);
-
-	strcat_s(result, 200, "symbols: ");
-	strcat_s(result, 200, numSymCh);
-	strcat_s(result, 200, "; words: ");
-	strcat_s(result, 200, numWordsCh);
-
-	SendMessage(hStatusWindow, SB_SETTEXT, 0, (LPARAM)result);
-
-	delete[] tempBuf;
+	ExitThread(0);
 }
 
 //Обработчик событий
@@ -314,8 +327,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 		case ID_ABOUT:
 		{
-			GetNumWordAndSymbols();
-			//MessageBox(hWnd, TEXT("Версия программы 0.0.1"), TEXT("О программе"), MB_OK);
+			MessageBox(hWnd, TEXT("Версия программы 0.0.1"), TEXT("О программе"), MB_OK);
 		}
 		break;
 		case ID_EDIT:
@@ -433,6 +445,8 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	//Создадим переменную для храненния сообщений
 	MSG msg;
+
+	CreateThread(NULL, 0, &GetNumWordAndSymbols, 0, 0, NULL);
 
 	//Создадим цикл обработки сообщений
 	while (GetMessage(&msg, NULL, 0, 0))
