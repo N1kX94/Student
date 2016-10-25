@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include <Shobjidl.h>
 
+#pragma comment(lib,"ComCtl32.Lib")
+
 #define MAX_FILESIZE 1000000 //1Mb
 #define ID_ABOUT 102
 #define ID_EDIT 103
@@ -12,6 +14,7 @@
 
 HWND hWnd; //корневое окно
 HWND hEdit; //текстовое поле
+HWND hStatusWindow;
 bool bUpdate;
 LPCSTR windowTitle = "Text Edit";
 
@@ -47,7 +50,7 @@ void WriteToClipboard() {
 }
 
 //чтение из буфера обмена, область должна быть выделена заранее в которую будет помещаться текст из буфера обмена
-void ReadFromClipboard(HWND hWnd, LPSTR dest) {
+void ReadFromClipboard() {
 	if (OpenClipboard(hWnd))//открываем буфер обмена
 	{
 		HANDLE hData = GetClipboardData(CF_TEXT);//извлекаем текст из буфера обмена
@@ -176,7 +179,6 @@ void OpenFile() {
 	bUpdate = FALSE;
 	return;
 }
-
 // Диалог сохранения файла
 HANDLE saveFile(HWND hWnd) {
 	HANDLE hf;
@@ -242,6 +244,44 @@ void OpenSaveFile() {
 	LocalUnlock(hTxtBuf);
 	return;
 }
+//подсчет символов и слов в тексте
+void GetNumWordAndSymbols()
+{
+	int charNum = GetWindowTextLength(hEdit);
+	char *tempBuf = new char[charNum + 1];
+	char *posTemp = 0;
+	char numWordsCh[100];
+	char numSymCh[100];
+	char result[200];
+	int numWords = 0;
+	ZeroMemory(tempBuf, charNum + 1);
+	ZeroMemory(numWordsCh, 100);
+	ZeroMemory(numSymCh, 100);
+	ZeroMemory(result, 200);
+
+	GetWindowText(hEdit, tempBuf, charNum + 1);
+
+	_itoa_s(lstrlen(tempBuf), numSymCh, 100, 10);
+
+	char * pch;
+	pch = strtok_s(tempBuf, " ,.-", &posTemp);
+	while (pch != NULL)
+	{
+		pch = strtok_s(NULL, " ,.-", &posTemp);
+		numWords++;
+	}
+
+	_itoa_s(numWords, numWordsCh, 100, 10);
+
+	strcat_s(result, 200, "symbols: ");
+	strcat_s(result, 200, numSymCh);
+	strcat_s(result, 200, "; words: ");
+	strcat_s(result, 200, numWordsCh);
+
+	SendMessage(hStatusWindow, SB_SETTEXT, 0, (LPARAM)result);
+
+	delete[] tempBuf;
+}
 
 //Обработчик событий
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -252,7 +292,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_SIZE:
 	{
-		MoveWindow(hEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+		SendMessage(hStatusWindow, WM_SIZE, 0, 0);
+		MoveWindow(hEdit, 0, 0, LOWORD(lParam), HIWORD(lParam)-20, TRUE);
 		break;
 	}
 	case WM_COMMAND: //Обработчик кнопок, полей ввода и т.д.
@@ -273,7 +314,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 		case ID_ABOUT:
 		{
-			MessageBox(hWnd, TEXT("Версия программы 0.0.1"), TEXT("О программе"), MB_OK);
+			GetNumWordAndSymbols();
+			//MessageBox(hWnd, TEXT("Версия программы 0.0.1"), TEXT("О программе"), MB_OK);
 		}
 		break;
 		case ID_EDIT:
@@ -286,7 +328,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		}
 		case ID_PASTE:
-
+			ReadFromClipboard();
 			break;
 		case ID_COPY:
 			WriteToClipboard();
@@ -318,12 +360,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_DESTROY:
 		PostQuitMessage(0);
-		break;
-	case WM_PAINT:
-		HDC hDC;
-		PAINTSTRUCT ps;
-		hDC = BeginPaint(hWnd, &ps);
-		EndPaint(hWnd, &ps);
 		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
@@ -361,7 +397,11 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	//Создание кнопок
 
 	//Создание Текст. поля
-	hEdit = CreateWindow("Edit", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_HSCROLL | WS_VSCROLL | ES_LEFT | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_MULTILINE, 10, 10, 760, 520, hWnd, (HMENU)ID_EDIT, hInstance, NULL);
+	hEdit = CreateWindow("Edit", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_HSCROLL | WS_VSCROLL | ES_LEFT | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_MULTILINE, 10, 10, 760, 500, hWnd, (HMENU)ID_EDIT, hInstance, NULL);
+
+	hStatusWindow = CreateWindow(STATUSCLASSNAME, "",
+		WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | CCS_BOTTOM,
+		0, 0, 0, 0, hWnd, (HMENU)0, hInstance, NULL);
 
 	//Создание меню
 	HMENU main_menu = CreateMenu();
@@ -377,7 +417,6 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	AppendMenu(menu_view, MF_STRING, ID_OPEN, ("О&ткрыть"));
 	AppendMenu(menu_view, MF_STRING, ID_SAVE, ("&Сохранить"));
 	AppendMenu(menu_view, MF_STRING, ID_EXIT, ("&Выход"));
-	AppendMenu(menu_edit, MF_STRING, 1006, "&Вырезать\tCtrl+x");
 	AppendMenu(menu_edit, MF_SEPARATOR, NULL, "");
 	AppendMenu(menu_edit, MF_STRING, ID_COPY, "&Копировать\tCtrl+c");
 	AppendMenu(menu_edit, MF_STRING, ID_PASTE, "&Вставить\tCtrl+v");
@@ -403,4 +442,3 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	}
 	return 0;
 }
-
