@@ -14,17 +14,18 @@
 
 HWND hWnd; //корневое окно
 HWND hEdit; //текстовое поле
-HWND hStatusWindow;
-bool bUpdate;
-LPCSTR windowTitle = "Text Edit";
+HWND hStatusWindow; //статус бар
+bool bUpdate; //переменная, для хранения изменения в тексовом окне
+bool close;
+LPCSTR windowTitle = "Text Edit"; //Имя окна
 
 //запись в буфер обмена
 void WriteToClipboard() {
 	if (OpenClipboard(hWnd))//открываем буфер обмена
 	{
-		int charNum = GetWindowTextLength(hEdit);
-		char *tempBuf = new char[charNum + 1];
-		ZeroMemory(tempBuf, charNum + 1);
+		int charNum = GetWindowTextLength(hEdit); //узнаем длину строки
+		char *tempBuf = new char[charNum + 1]; //создаем новый буфер
+		ZeroMemory(tempBuf, charNum + 1);   //очищаем буфер
 		DWORD beginPos = 0;
 		DWORD endPos = 0;
 
@@ -108,6 +109,7 @@ HANDLE OpenFile(HWND hWnd)
 
 	return 0;
 }
+
 //функция открытия файла
 void OpenFile() {
 	if (bUpdate)
@@ -179,6 +181,7 @@ void OpenFile() {
 	bUpdate = FALSE;
 	return;
 }
+
 // Диалог сохранения файла
 HANDLE saveFile(HWND hWnd) {
 	HANDLE hf;
@@ -213,6 +216,7 @@ HANDLE saveFile(HWND hWnd) {
 	delete[] pfile;
 	return hf;
 }
+
 //функция сохранения файла
 void OpenSaveFile() {
 	DWORD dwCharsToWrite;
@@ -244,6 +248,7 @@ void OpenSaveFile() {
 	LocalUnlock(hTxtBuf);
 	return;
 }
+
 //поток для подсчета символов и слов в тексте
 DWORD WINAPI GetNumWordAndSymbols(CONST LPVOID lpParam)
 {
@@ -255,7 +260,7 @@ DWORD WINAPI GetNumWordAndSymbols(CONST LPVOID lpParam)
 	char numSymCh[100];
 	char result[200];
 
-	while (1) {
+	while (!close) {
 		numWords = 0;
 		tempBuf = 0;
 		posTemp = 0;
@@ -269,28 +274,28 @@ DWORD WINAPI GetNumWordAndSymbols(CONST LPVOID lpParam)
 
 		GetWindowText(hEdit, tempBuf, charNum + 1);
 
-		_itoa_s(lstrlen(tempBuf), numSymCh, 100, 10);
+		_itoa_s(lstrlen(tempBuf), numSymCh, 100, 10); //преобразование из чисел в строку, с подсчетом числа символов
 
 		char * pch;
 		pch = strtok_s(tempBuf, " ,.-\"!;:", &posTemp);
 		while (pch != NULL)
 		{
-			pch = strtok_s(NULL, " ,.-\"!;:", &posTemp);
-			numWords++;
+			pch = strtok_s(NULL, " ,.-\"!;:", &posTemp); //отделение слов
+			numWords++; //подсчет слов в строке
 		}
 
-		_itoa_s(numWords, numWordsCh, 100, 10);
+		_itoa_s(numWords, numWordsCh, 100, 10); //преобразование из чисел в строку
 
-		strcat_s(result, 200, "symbols: ");
+		strcat_s(result, 200, "Символы: ");
 		strcat_s(result, 200, numSymCh);
-		strcat_s(result, 200, "; words: ");
+		strcat_s(result, 200, "; Слова: ");
 		strcat_s(result, 200, numWordsCh);
 
 		SendMessage(hStatusWindow, SB_SETTEXT, 0, (LPARAM)result);
 
 		delete[] tempBuf;
 
-		Sleep(1000);
+		Sleep(1000); //ожидание перед выполнением потока
 	}
 
 	ExitThread(0);
@@ -299,7 +304,7 @@ DWORD WINAPI GetNumWordAndSymbols(CONST LPVOID lpParam)
 //Обработчик событий
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	int wmId, wmEvent;
+	int wmEvent;
 
 	switch (message)
 	{
@@ -317,7 +322,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 		case ID_OPEN:
 		{
-			OpenFile();
+			if (bUpdate)
+			{
+				//Если были изменения в файле
+				switch (MessageBox(hWnd, "Файл был изменен. Сохранить изменения?", windowTitle, MB_YESNOCANCEL | MB_ICONQUESTION))
+				{
+				case IDYES:
+					OpenSaveFile();
+					bUpdate = FALSE;
+					OpenFile();
+					break;
+				case IDNO:
+					bUpdate = FALSE;
+					OpenFile();
+					break;
+				case IDCANCEL:
+					break;
+				default:
+					break;
+				}
+			}
+			else
+			{
+				OpenFile();
+			}
 		}
 		break;
 		case ID_SAVE:
@@ -333,10 +361,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case ID_EDIT:
 		{
 			if (wmEvent == EN_ERRSPACE)
-				MessageBox(hWnd, "Слишком мало памяти!", "Text Edit", MB_OK);
+				MessageBox(hWnd, "Слишком мало памяти!", windowTitle, MB_OK);
 			else if (wmEvent == EN_CHANGE)
 				bUpdate = TRUE;
-
 			break;
 		}
 		case ID_PASTE:
@@ -346,31 +373,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			WriteToClipboard();
 			break;
 		case ID_EXIT:
-		{
-			if (bUpdate)
-			{
-				//Если были изменения в файле, или пытаететь открыть другой файл
-				if (IDYES == MessageBox(hWnd, "Файл был изменен. Сохранить изменения?", windowTitle, MB_YESNO | MB_ICONQUESTION))
-				{
-					SendMessage(hWnd, BM_CLICK, 0, 0);
-
-					// следующая строка - условие что сохранение файла не удалось и сразу же, если это так, - запрос: все равно продолжить или выйти из обработчика сообщения 
-					if (bUpdate	&& IDNO == MessageBox(hWnd, "Старые данные не сохранены. Открыть файл в противном случае (потеряв данные)?", windowTitle, MB_YESNO | MB_ICONQUESTION))
-						break;
-				}
-
-				bUpdate = FALSE;
-			}
-
 			SendMessage(hWnd, WM_CLOSE, 0, 0);
 			break;
 		}
-		}
 	}
 	break;
-	case WM_CREATE:
+	case WM_CLOSE:
+		if (bUpdate)
+		{
+			//Если были изменения в файле
+			//при ответе да или нет, происходит закрытие окна.
+			switch (MessageBox(hWnd, "Файл был изменен. Сохранить изменения?", windowTitle, MB_YESNOCANCEL | MB_ICONQUESTION))
+			{
+			case IDYES:
+				OpenSaveFile();
+				close = true;
+				bUpdate = FALSE;
+				DestroyWindow(hWnd);
+				break;
+			case IDNO:
+				close = true;
+				bUpdate = FALSE;
+				DestroyWindow(hWnd);
+				break;
+			case IDCANCEL:
+				break;
+			default:
+				break;
+			}
+		}
+		else
+		DestroyWindow(hWnd);
 		break;
-	case WM_DESTROY:
+	case WM_DESTROY:		
 		PostQuitMessage(0);
 		break;
 	default:
@@ -380,15 +415,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 }
 
 //Точка входа в программу
-int WINAPI WinMain(HINSTANCE hInstance,
-	HINSTANCE hPrevInstance,
-	LPSTR lpCmdLine,
-	int nCmdShow)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+	close = false;
+
 	//Создаем класс окна
 	WNDCLASS WindowClass;
 
-	//Заполняем структуру 
+	//Заполняем структуру  окна
 	WindowClass.style = 0;
 	WindowClass.lpfnWndProc = (WNDPROC)WndProc;
 	WindowClass.cbClsExtra = 0;
@@ -406,29 +440,27 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	//Создаем переменную, в которой поместим идентификатор окна
 	hWnd = CreateWindow("Class", "Text Edit", WS_OVERLAPPEDWINDOW, 0, 0, 800, 600, NULL, NULL, hInstance, NULL);
 
-	//Создание кнопок
-
 	//Создание Текст. поля
 	hEdit = CreateWindow("Edit", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_HSCROLL | WS_VSCROLL | ES_LEFT | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_MULTILINE, 10, 10, 760, 500, hWnd, (HMENU)ID_EDIT, hInstance, NULL);
 
-	hStatusWindow = CreateWindow(STATUSCLASSNAME, "",
-		WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | CCS_BOTTOM,
-		0, 0, 0, 0, hWnd, (HMENU)0, hInstance, NULL);
+	//Создаем статус бар
+	hStatusWindow = CreateWindow(STATUSCLASSNAME, "", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | CCS_BOTTOM, 0, 0, 0, 0, hWnd, (HMENU)0, hInstance, NULL);
 
 	//Создание меню
 	HMENU main_menu = CreateMenu();
 	HMENU menu_help = CreatePopupMenu();
 	HMENU menu_edit = CreatePopupMenu();
 	HMENU menu_view = CreatePopupMenu();
+
 	//главное меню
 	AppendMenu(main_menu, MF_STRING | MF_POPUP, (UINT)menu_view, "&Файл");
 	AppendMenu(main_menu, MF_STRING | MF_POPUP, (UINT)menu_edit, "&Редактировать");
 	AppendMenu(main_menu, MF_STRING | MF_POPUP, (UINT)menu_help, "&Справка");
 
 	//подменю 
-	AppendMenu(menu_view, MF_STRING, ID_OPEN, ("О&ткрыть"));
-	AppendMenu(menu_view, MF_STRING, ID_SAVE, ("&Сохранить"));
-	AppendMenu(menu_view, MF_STRING, ID_EXIT, ("&Выход"));
+	AppendMenu(menu_view, MF_STRING, ID_OPEN, "О&ткрыть");
+	AppendMenu(menu_view, MF_STRING, ID_SAVE, "&Сохранить");
+	AppendMenu(menu_view, MF_STRING, ID_EXIT, "&Выход");
 	AppendMenu(menu_edit, MF_SEPARATOR, NULL, "");
 	AppendMenu(menu_edit, MF_STRING, ID_COPY, "&Копировать\tCtrl+c");
 	AppendMenu(menu_edit, MF_STRING, ID_PASTE, "&Вставить\tCtrl+v");
@@ -440,13 +472,14 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	//показать окно
 	ShowWindow(hWnd, SW_SHOW); 
 	InvalidateRect(hWnd, NULL, true);
+
 	//обновить содержимое окна
 	UpdateWindow(hWnd);
 
 	//Создадим переменную для храненния сообщений
 	MSG msg;
 
-	CreateThread(NULL, 0, &GetNumWordAndSymbols, 0, 0, NULL);
+	CreateThread(NULL, 0, &GetNumWordAndSymbols, 0, 0, NULL); //поток для подсчета символов и слов в тексте
 
 	//Создадим цикл обработки сообщений
 	while (GetMessage(&msg, NULL, 0, 0))
