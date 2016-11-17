@@ -461,7 +461,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	AppendMenu(menu_view, MF_STRING, ID_OPEN, "О&ткрыть");
 	AppendMenu(menu_view, MF_STRING, ID_SAVE, "&Сохранить");
 	AppendMenu(menu_view, MF_STRING, ID_EXIT, "&Выход");
-	AppendMenu(menu_edit, MF_SEPARATOR, NULL, "");
 	AppendMenu(menu_edit, MF_STRING, ID_COPY, "&Копировать\tCtrl+c");
 	AppendMenu(menu_edit, MF_STRING, ID_PASTE, "&Вставить\tCtrl+v");
 	AppendMenu(menu_help, MF_STRING, ID_ABOUT, "&О программе");
